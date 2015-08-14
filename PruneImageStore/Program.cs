@@ -15,6 +15,9 @@ namespace PruneImageStore
             double threshold = 10;
             int verbose = 0;
             string folderPath = null;
+            bool continuous = false;
+            int continuousWait = 10000;
+
             for (int arg = 0; arg < args.Length; ++arg)
             {
                 switch (args[arg])
@@ -42,6 +45,25 @@ namespace PruneImageStore
                         verbose = 2;
                         break;
 
+                    case "-c":
+                        continuous = true;
+                        break;
+
+                    case "-w":
+                        ++arg;
+                        if (arg > args.Length)
+                        {
+                            Usage();
+                            return 1;
+                        }
+
+                        if (!int.TryParse(args[arg], out continuousWait))
+                        {
+                            Usage();
+                            return 1;
+                        }
+                        break;
+
                     default:
                         if (folderPath != null)
                         {
@@ -61,42 +83,61 @@ namespace PruneImageStore
             string lastFilePath = null;
             string fileToDelete = null;
 
-            foreach (string filePath in Directory.EnumerateFiles(folderPath))
+            while (continuous)
             {
-                if (lastFilePath != null)
+                foreach (string filePath in Directory.EnumerateFiles(folderPath))
                 {
-                    if (verbose > 1)
+                    if (lastFilePath == null)
                     {
-                        Console.WriteLine("Compare " + filePath + " with " + lastFilePath);
+                        lastFilePath = filePath;
                     }
-
-                    Comparison c = new Comparison(lastFilePath, filePath);
-                    if (fileToDelete != null)
+                    else if (string.Compare(lastFilePath, filePath) < 0)
                     {
                         if (verbose > 1)
                         {
-                            Console.WriteLine("Delete " + fileToDelete);
+                            Console.WriteLine("Compare " + filePath + " with " + lastFilePath);
                         }
-                        File.Delete(fileToDelete);
-                        fileToDelete = null;
-                    }
 
-                    if (verbose > 1)
-                    {
-                        Console.WriteLine("\tAAD: " + c.AverageAbsoluteDifference + "\tASD: " + c.AverageSquareDifference);
-                    }
-
-                    if (c.AverageSquareDifference < threshold)
-                    {
-                        if (verbose > 0)
+                        Comparison c = new Comparison(lastFilePath, filePath);
+                        if (fileToDelete != null)
                         {
-                            Console.WriteLine("Old is same as new (ASD = " + c.AverageSquareDifference + "), delete new: " + Path.GetFileName(filePath));
+                            if (verbose > 1)
+                            {
+                                Console.WriteLine("Delete " + fileToDelete);
+                            }
+                            File.Delete(fileToDelete);
+                            fileToDelete = null;
                         }
-                        fileToDelete = filePath;
+
+                        if (verbose > 1)
+                        {
+                            Console.WriteLine("\tAAD: " + c.AverageAbsoluteDifference + "\tASD: " + c.AverageSquareDifference);
+                        }
+
+                        if (c.AverageSquareDifference < threshold)
+                        {
+                            if (verbose > 0)
+                            {
+                                Console.WriteLine("Old is same as new (ASD = " + c.AverageSquareDifference + "), delete new: " + Path.GetFileName(filePath));
+                            }
+                            fileToDelete = filePath;
+                        }
+
+                        lastFilePath = filePath;
+                    }
+                    else
+                    {
                     }
                 }
 
-                lastFilePath = filePath;
+                if (continuous)
+                {
+                    if (verbose > 0)
+                    {
+                        Console.WriteLine("Sleeping " + continuousWait + " milliseconds.");
+                    }
+                    System.Threading.Thread.Sleep(continuousWait);
+                }
             }
 
             if (fileToDelete != null)
@@ -114,7 +155,7 @@ namespace PruneImageStore
 
         private static void Usage()
         {
-            Console.WriteLine("PruneImageStore <folder-path> [-t <threshold>] [-v] [-V]");
+            Console.WriteLine("PruneImageStore <folder-path> [-t <threshold>] [-v] [-V] [-c -w <milliseconds>]");
         }
     }
 }
