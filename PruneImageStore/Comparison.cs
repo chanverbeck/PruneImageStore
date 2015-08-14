@@ -26,81 +26,112 @@ namespace ImageDiff
 
         private void CompareImages(string leftImageSource, string rightImageSource)
         {
-            BitmapFrame leftFrame = GetBitmapFrame(leftImageSource);
-
-            int leftHeight = leftFrame.PixelHeight;
-            int leftWidth = leftFrame.PixelWidth;
-            int leftBytesPerPixel = (leftFrame.Format.BitsPerPixel + 7) / 8;
-            int leftStride = leftWidth * leftBytesPerPixel;
-
-            byte[] leftBytes = new byte[leftHeight * leftStride];
-            leftFrame.CopyPixels(leftBytes, leftStride, 0);
-
-            BitmapFrame rightFrame = GetBitmapFrame(rightImageSource);
-
-            int rightHeight = rightFrame.PixelHeight;
-            int rightWidth = rightFrame.PixelWidth;
-            int rightBytesPerPixel = (rightFrame.Format.BitsPerPixel + 7) / 8;
-            int rightStride = rightWidth * rightBytesPerPixel;
-
-            byte[] rightBytes = new byte[rightHeight * rightStride];
-            rightFrame.CopyPixels(rightBytes, rightStride, 0);
-
-            if (rightFrame.Format != leftFrame.Format)
+            using (Stream leftStream = new FileStream(leftImageSource, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
-                throw new InvalidDataException("Images not the same format(" + leftFrame.Format.ToString() + " != " + rightFrame.Format.ToString());
-            }
+                BitmapFrame leftFrame = GetBitmapFrame(leftImageSource, leftStream);
 
-            int diffHeight = Math.Min(leftHeight, rightHeight);
-            int diffWidth = Math.Min(leftWidth, rightWidth);
-            int diffStride = diffWidth * leftBytesPerPixel;
+                int leftHeight = leftFrame.PixelHeight;
+                int leftWidth = leftFrame.PixelWidth;
+                int leftBytesPerPixel = (leftFrame.Format.BitsPerPixel + 7) / 8;
+                int leftStride = leftWidth * leftBytesPerPixel;
 
-            int pixelCount = diffHeight * diffStride;
-            double totalAbsoluteDifference = 0;
-            double totalSquareDifference = 0;
+                byte[] leftBytes = new byte[leftHeight * leftStride];
+                leftFrame.CopyPixels(leftBytes, leftStride, 0);
 
-            int[] diffInts = new int[leftHeight * leftStride];
-            int maxDiff = 0;
-            for (int row = 0; row < diffHeight; ++row)
-            {
-                for (int col = 0; col < diffStride; ++col)
+                using (Stream rightStream = new FileStream(rightImageSource, FileMode.Open, FileAccess.Read, FileShare.Read))
                 {
-                    int difference = rightBytes[col + row * rightStride] - leftBytes[col + row * leftStride];
+                    BitmapFrame rightFrame = GetBitmapFrame(rightImageSource, rightStream);
 
-                    totalAbsoluteDifference += Math.Abs(difference);
-                    totalSquareDifference += difference * difference;
+                    int rightHeight = rightFrame.PixelHeight;
+                    int rightWidth = rightFrame.PixelWidth;
+                    int rightBytesPerPixel = (rightFrame.Format.BitsPerPixel + 7) / 8;
+                    int rightStride = rightWidth * rightBytesPerPixel;
 
-                    diffInts[col + row * diffStride] = difference;
-                    if (diffInts[col + row * diffStride] > maxDiff)
+                    byte[] rightBytes = new byte[rightHeight * rightStride];
+                    rightFrame.CopyPixels(rightBytes, rightStride, 0);
+
+                    if (rightFrame.Format != leftFrame.Format)
                     {
-                        maxDiff = diffInts[col + row * diffStride];
+                        throw new InvalidDataException("Images not the same format(" + leftFrame.Format.ToString() + " != " + rightFrame.Format.ToString());
                     }
-                    else if (diffInts[col + row * diffStride] < -maxDiff)
+
+
+                    int diffHeight = Math.Min(leftHeight, rightHeight);
+                    int diffWidth = Math.Min(leftWidth, rightWidth);
+                    int diffStride = diffWidth * leftBytesPerPixel;
+
+                    int pixelCount = diffHeight * diffStride;
+                    double totalAbsoluteDifference = 0;
+                    double totalSquareDifference = 0;
+
+                    int[] diffInts = new int[leftHeight * leftStride];
+                    int maxDiff = 0;
+                    for (int row = 0; row < diffHeight; ++row)
                     {
-                        maxDiff = (short)-diffInts[col + row * diffStride];
+                        for (int col = 0; col < diffStride; ++col)
+                        {
+                            int difference = rightBytes[col + row * rightStride] - leftBytes[col + row * leftStride];
+
+                            totalAbsoluteDifference += Math.Abs(difference);
+                            totalSquareDifference += difference * difference;
+
+                            diffInts[col + row * diffStride] = difference;
+                            if (diffInts[col + row * diffStride] > maxDiff)
+                            {
+                                maxDiff = diffInts[col + row * diffStride];
+                            }
+                            else if (diffInts[col + row * diffStride] < -maxDiff)
+                            {
+                                maxDiff = (short)-diffInts[col + row * diffStride];
+                            }
+                        }
                     }
+
+                    byte[] diffBytes = new byte[leftHeight * leftStride];
+                    double scale = 1;
+                    if (maxDiff != 0)
+                    {
+                        scale = 127.0 / (double)maxDiff;
+                    }
+                    for (int i = 0; i < diffInts.Length; ++i)
+                    {
+                        diffBytes[i] = (byte)((double)diffInts[i] * scale + 128.0);
+                    }
+
+                    AverageAbsoluteDifference = (totalAbsoluteDifference / (double)pixelCount);
+                    AverageSquareDifference = (totalSquareDifference / (double)pixelCount);
+                    Result = BitmapSource.Create(diffWidth, diffHeight, leftFrame.DpiX, leftFrame.DpiY, leftFrame.Format, null, diffBytes, diffStride);
                 }
             }
-
-            byte[] diffBytes = new byte[leftHeight * leftStride];
-            double scale = 1;
-            if (maxDiff != 0)
-            {
-                scale = 127.0 / (double)maxDiff;
-            }
-            for (int i = 0; i < diffInts.Length; ++i)
-            {
-                diffBytes[i] = (byte)((double)diffInts[i] * scale + 128.0);
-            }
-
-            AverageAbsoluteDifference = (totalAbsoluteDifference / (double)pixelCount);
-            AverageSquareDifference = (totalSquareDifference / (double)pixelCount);
-            Result = BitmapSource.Create(diffWidth, diffHeight, leftFrame.DpiX, leftFrame.DpiY, leftFrame.Format, null, diffBytes, diffStride);
         }
 
-        private static BitmapFrame GetBitmapFrame(string sourceFile)
+        private static BitmapFrame GetBitmapFrame(string sourceFile, Stream s)
         {
-            BitmapDecoder d = BitmapDecoder.Create(new Uri(@"file://" + sourceFile), BitmapCreateOptions.IgnoreImageCache, BitmapCacheOption.None);
+            BitmapDecoder d;
+
+            string extension = Path.GetExtension(sourceFile);
+            switch (extension.ToLower())
+            {
+                case ".jpg":
+                case ".jpeg":
+                    d = new JpegBitmapDecoder(s, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.None);
+                    break;
+                case ".gif":
+                    d = new GifBitmapDecoder(s, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.None);
+                    break;
+                case ".png":
+                    d = new PngBitmapDecoder(s, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.None);
+                    break;
+                case ".bmp":
+                    d = new BmpBitmapDecoder(s, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.None);
+                    break;
+                case ".tif":
+                case ".tiff":
+                    d = new TiffBitmapDecoder(s, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.None);
+                    break;
+                default:
+                    throw new InvalidDataException("Unsupported file extension " + extension);
+            }
 
             BitmapFrame frame = d.Frames[0];
 

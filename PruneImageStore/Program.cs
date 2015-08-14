@@ -12,13 +12,52 @@ namespace PruneImageStore
     {
         static int Main(string[] args)
         {
-            if (args.Length != 1)
+            double threshold = 10;
+            int verbose = 0;
+            string folderPath = null;
+            for (int arg = 0; arg < args.Length; ++arg)
             {
-                Console.WriteLine("Need to specify a folder name");
+                switch (args[arg])
+                {
+                    case "-t":
+                        ++arg;
+                        if (arg > args.Length)
+                        {
+                            Usage();
+                            return 1;
+                        }
+
+                        if (!double.TryParse(args[arg], out threshold))
+                        {
+                            Usage();
+                            return 1;
+                        }
+                        break;
+
+                    case "-v":
+                        verbose = 1;
+                        break;
+
+                    case "-V":
+                        verbose = 2;
+                        break;
+
+                    default:
+                        if (folderPath != null)
+                        {
+                            Usage();
+                            return 1;
+                        }
+                        folderPath = args[arg];
+                        break;
+                }
+            }
+            if (folderPath == null)
+            {
+                Usage();
                 return 1;
             }
 
-            string folderPath = args[0];
             string lastFilePath = null;
             string fileToDelete = null;
 
@@ -26,20 +65,33 @@ namespace PruneImageStore
             {
                 if (lastFilePath != null)
                 {
-                    Console.WriteLine("Compare " + filePath + " with " + lastFilePath);
+                    if (verbose > 1)
+                    {
+                        Console.WriteLine("Compare " + filePath + " with " + lastFilePath);
+                    }
 
                     Comparison c = new Comparison(lastFilePath, filePath);
                     if (fileToDelete != null)
                     {
-                        Console.WriteLine("Actually delete " + fileToDelete);
+                        if (verbose > 1)
+                        {
+                            Console.WriteLine("Delete " + fileToDelete);
+                        }
+                        File.Delete(fileToDelete);
                         fileToDelete = null;
                     }
 
-                    Console.WriteLine("\tAAD: " + c.AverageAbsoluteDifference + "\tASD: " + c.AverageSquareDifference);
-
-                    if (c.AverageSquareDifference < 10.0)
+                    if (verbose > 1)
                     {
-                        Console.WriteLine("Old is same as new (ASD = " + c.AverageSquareDifference + "), delete new: " + Path.GetFileName(filePath));
+                        Console.WriteLine("\tAAD: " + c.AverageAbsoluteDifference + "\tASD: " + c.AverageSquareDifference);
+                    }
+
+                    if (c.AverageSquareDifference < threshold)
+                    {
+                        if (verbose > 0)
+                        {
+                            Console.WriteLine("Old is same as new (ASD = " + c.AverageSquareDifference + "), delete new: " + Path.GetFileName(filePath));
+                        }
                         fileToDelete = filePath;
                     }
                 }
@@ -47,7 +99,22 @@ namespace PruneImageStore
                 lastFilePath = filePath;
             }
 
+            if (fileToDelete != null)
+            {
+                if (verbose > 1)
+                {
+                    Console.WriteLine("Delete " + fileToDelete);
+                }
+                File.Delete(fileToDelete);
+                fileToDelete = null;
+            }
+
             return 0;
+        }
+
+        private static void Usage()
+        {
+            Console.WriteLine("PruneImageStore <folder-path> [-t <threshold>] [-v] [-V]");
         }
     }
 }
