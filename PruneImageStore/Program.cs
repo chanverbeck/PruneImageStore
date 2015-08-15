@@ -106,14 +106,14 @@ namespace PruneImageStore
 
                             if (verbose > 1)
                             {
-                                Console.WriteLine("\tAAD: " + c.AverageAbsoluteDifference + "\tASD: " + c.AverageSquareDifference);
+                                Console.WriteLine("\tAAD: " + c.AverageAbsoluteDifferenceText + "\tASD: " + c.AverageSquareDifferenceText);
                             }
 
                             if (c.AverageSquareDifference < threshold)
                             {
                                 if (verbose > 0)
                                 {
-                                    Console.WriteLine("Old is same as new (ASD = " + c.AverageSquareDifference + "), delete new: " + Path.GetFileName(filePath));
+                                    Console.WriteLine("Old is same as new (ASD = " + c.AverageSquareDifferenceText + "), delete new: " + Path.GetFileName(filePath));
                                 }
                                 if (verbose > 1)
                                 {

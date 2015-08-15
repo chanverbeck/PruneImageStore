@@ -151,7 +151,7 @@ namespace ImageDiff
             return frame;
         }
 
-        public string AverageSquareDistanceText { get { return AverageSquareDifference.ToString(); } }
-        public string AverageAbsoluteDistanceText { get { return AverageAbsoluteDifference.ToString(); } }
+        public string AverageSquareDifferenceText { get { return string.Format("{0:0.0}", AverageSquareDifference); } }
+        public string AverageAbsoluteDifferenceText { get { return string.Format("{0:0.0}", AverageAbsoluteDifference); } }
     }
 }
