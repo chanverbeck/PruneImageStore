@@ -6,6 +6,8 @@ namespace ImageDiff
 {
     public class Comparison
     {
+        private string leftImagePath;
+        private string rightImagePath;
         public Uri LeftImage { private set; get; }
         public string LeftName { private set; get; }
         public Uri RightImage { private set; get; }
@@ -16,19 +18,20 @@ namespace ImageDiff
 
         public Comparison(string leftFile, string rightFile)
         {
+            leftImagePath = leftFile;
+            rightImagePath = rightFile;
+
             this.LeftImage = new Uri("file://" + leftFile);
             this.LeftName = Path.GetFileName(leftFile);
             this.RightImage = new Uri("file://" + rightFile);
             this.RightName = Path.GetFileName(rightFile);
-
-            CompareImages(leftFile, rightFile);
         }
 
-        private void CompareImages(string leftImageSource, string rightImageSource)
+        public void CompareImages(bool createDiffImage)
         {
-            using (Stream leftStream = new FileStream(leftImageSource, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (Stream leftStream = new FileStream(leftImagePath, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
-                BitmapFrame leftFrame = GetBitmapFrame(leftImageSource, leftStream);
+                BitmapFrame leftFrame = GetBitmapFrame(leftImagePath, leftStream);
 
                 int leftHeight = leftFrame.PixelHeight;
                 int leftWidth = leftFrame.PixelWidth;
@@ -38,9 +41,9 @@ namespace ImageDiff
                 byte[] leftBytes = new byte[leftHeight * leftStride];
                 leftFrame.CopyPixels(leftBytes, leftStride, 0);
 
-                using (Stream rightStream = new FileStream(rightImageSource, FileMode.Open, FileAccess.Read, FileShare.Read))
+                using (Stream rightStream = new FileStream(rightImagePath, FileMode.Open, FileAccess.Read, FileShare.Read))
                 {
-                    BitmapFrame rightFrame = GetBitmapFrame(rightImageSource, rightStream);
+                    BitmapFrame rightFrame = GetBitmapFrame(rightImagePath, rightStream);
 
                     int rightHeight = rightFrame.PixelHeight;
                     int rightWidth = rightFrame.PixelWidth;
@@ -64,7 +67,11 @@ namespace ImageDiff
                     double totalAbsoluteDifference = 0;
                     double totalSquareDifference = 0;
 
-                    int[] diffInts = new int[leftHeight * leftStride];
+                    int[] diffInts = null;
+                    if (createDiffImage)
+                    {
+                        diffInts = new int[leftHeight * leftStride];
+                    }
                     int maxDiff = 0;
                     for (int row = 0; row < diffHeight; ++row)
                     {
@@ -75,32 +82,38 @@ namespace ImageDiff
                             totalAbsoluteDifference += Math.Abs(difference);
                             totalSquareDifference += difference * difference;
 
-                            diffInts[col + row * diffStride] = difference;
-                            if (diffInts[col + row * diffStride] > maxDiff)
+                            if (createDiffImage)
                             {
-                                maxDiff = diffInts[col + row * diffStride];
+                                diffInts[col + row * diffStride] = difference;
                             }
-                            else if (diffInts[col + row * diffStride] < -maxDiff)
+                            if (difference > maxDiff)
                             {
-                                maxDiff = (short)-diffInts[col + row * diffStride];
+                                maxDiff = difference;
+                            }
+                            else if (difference < -maxDiff)
+                            {
+                                maxDiff = (short)-difference;
                             }
                         }
                     }
 
-                    byte[] diffBytes = new byte[leftHeight * leftStride];
-                    double scale = 1;
-                    if (maxDiff != 0)
+                    if (createDiffImage)
                     {
-                        scale = 127.0 / (double)maxDiff;
-                    }
-                    for (int i = 0; i < diffInts.Length; ++i)
-                    {
-                        diffBytes[i] = (byte)((double)diffInts[i] * scale + 128.0);
+                        byte[] diffBytes = new byte[leftHeight * leftStride];
+                        double scale = 1;
+                        if (maxDiff != 0)
+                        {
+                            scale = 127.0 / (double)maxDiff;
+                        }
+                        for (int i = 0; i < diffInts.Length; ++i)
+                        {
+                            diffBytes[i] = (byte)((double)diffInts[i] * scale + 128.0);
+                        }
+                        Result = BitmapSource.Create(diffWidth, diffHeight, leftFrame.DpiX, leftFrame.DpiY, leftFrame.Format, null, diffBytes, diffStride);
                     }
 
                     AverageAbsoluteDifference = (totalAbsoluteDifference / (double)pixelCount);
                     AverageSquareDifference = (totalSquareDifference / (double)pixelCount);
-                    Result = BitmapSource.Create(diffWidth, diffHeight, leftFrame.DpiX, leftFrame.DpiY, leftFrame.Format, null, diffBytes, diffStride);
                 }
             }
         }

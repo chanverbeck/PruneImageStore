@@ -80,53 +80,76 @@ namespace PruneImageStore
                 return 1;
             }
 
-            string lastFilePath = null;
-            string fileToDelete = null;
+            string comparisonFilePath = null;
+            bool firstRun = true;
 
-            while (continuous)
+            while (continuous || firstRun)
             {
+                firstRun = false;
                 foreach (string filePath in Directory.EnumerateFiles(folderPath))
                 {
-                    if (lastFilePath == null)
+                    if (comparisonFilePath == null)
                     {
-                        lastFilePath = filePath;
+                        comparisonFilePath = filePath;
                     }
-                    else if (string.Compare(lastFilePath, filePath) < 0)
+                    else if (string.Compare(comparisonFilePath, filePath) < 0)
                     {
                         if (verbose > 1)
                         {
-                            Console.WriteLine("Compare " + filePath + " with " + lastFilePath);
+                            Console.WriteLine("Compare " + filePath + " with " + comparisonFilePath);
                         }
 
-                        Comparison c = new Comparison(lastFilePath, filePath);
-                        if (fileToDelete != null)
+                        Comparison c = new Comparison(comparisonFilePath, filePath);
+                        try
                         {
+                            c.CompareImages(false);
+
                             if (verbose > 1)
                             {
-                                Console.WriteLine("Delete " + fileToDelete);
+                                Console.WriteLine("\tAAD: " + c.AverageAbsoluteDifference + "\tASD: " + c.AverageSquareDifference);
                             }
-                            File.Delete(fileToDelete);
-                            fileToDelete = null;
-                        }
 
-                        if (verbose > 1)
-                        {
-                            Console.WriteLine("\tAAD: " + c.AverageAbsoluteDifference + "\tASD: " + c.AverageSquareDifference);
-                        }
-
-                        if (c.AverageSquareDifference < threshold)
-                        {
-                            if (verbose > 0)
+                            if (c.AverageSquareDifference < threshold)
                             {
-                                Console.WriteLine("Old is same as new (ASD = " + c.AverageSquareDifference + "), delete new: " + Path.GetFileName(filePath));
+                                if (verbose > 0)
+                                {
+                                    Console.WriteLine("Old is same as new (ASD = " + c.AverageSquareDifference + "), delete new: " + Path.GetFileName(filePath));
+                                }
+                                if (verbose > 1)
+                                {
+                                    Console.WriteLine("Delete " + filePath);
+                                }
+                                File.Delete(filePath);
                             }
-                            fileToDelete = filePath;
+                            else
+                            {
+                                comparisonFilePath = filePath;
+                            }
                         }
-
-                        lastFilePath = filePath;
+                        // I've seen two kinds of errors, but we should survive any.
+                        // I've seen IOExceptions because some other process had the file open, and
+                        // I've seen a NotSupportedException due to a failure to create the decoder because of file corruption issues.
+                        catch (IOException e)
+                        {
+                            Console.Error.WriteLine("IOException: " + e.Message);
+                            Console.Error.WriteLine("Files");
+                            Console.Error.WriteLine("\tLeft:\t" + comparisonFilePath);
+                            Console.Error.WriteLine("\tRight:\t" + filePath);
+                            comparisonFilePath = filePath;
+                        }
+                        catch (NotSupportedException e)
+                        {
+                            Console.Error.WriteLine("NotSupportedException: " + e.Message);
+                            Console.Error.WriteLine("Files");
+                            Console.Error.WriteLine("\tLeft:\t" + comparisonFilePath);
+                            Console.Error.WriteLine("\tRight:\t" + filePath);
+                            comparisonFilePath = filePath;
+                        }
                     }
                     else
                     {
+                        // This is the case where continuous is true, and
+                        // we've already seen the file in the prior iteration.
                     }
                 }
 
@@ -138,16 +161,6 @@ namespace PruneImageStore
                     }
                     System.Threading.Thread.Sleep(continuousWait);
                 }
-            }
-
-            if (fileToDelete != null)
-            {
-                if (verbose > 1)
-                {
-                    Console.WriteLine("Delete " + fileToDelete);
-                }
-                File.Delete(fileToDelete);
-                fileToDelete = null;
             }
 
             return 0;
