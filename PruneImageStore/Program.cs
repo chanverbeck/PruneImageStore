@@ -17,6 +17,7 @@ namespace PruneImageStore
             string folderPath = null;
             bool continuous = false;
             int continuousWait = 10000;
+            bool dryRun = false;
 
             for (int arg = 0; arg < args.Length; ++arg)
             {
@@ -64,6 +65,10 @@ namespace PruneImageStore
                         }
                         break;
 
+                    case "-d":
+                        dryRun = true;
+                        break;
+
                     default:
                         if (folderPath != null)
                         {
@@ -85,6 +90,7 @@ namespace PruneImageStore
 
             while (continuous || firstRun)
             {
+                int deletedFileCount = 0;
                 firstRun = false;
                 foreach (string filePath in Directory.EnumerateFiles(folderPath))
                 {
@@ -111,15 +117,19 @@ namespace PruneImageStore
 
                             if (c.AverageSquareDifference < threshold)
                             {
+                                ++deletedFileCount;
                                 if (verbose > 0)
                                 {
                                     Console.WriteLine("Old is same as new (ASD = " + c.AverageSquareDifferenceText + "), delete new: " + Path.GetFileName(filePath));
                                 }
-                                if (verbose > 1)
+                                if (!dryRun)
                                 {
-                                    Console.WriteLine("Delete " + filePath);
+                                    if (verbose > 1)
+                                    {
+                                        Console.WriteLine("Delete " + filePath);
+                                    }
+                                    File.Delete(filePath);
                                 }
-                                File.Delete(filePath);
                             }
                             else
                             {
@@ -153,6 +163,7 @@ namespace PruneImageStore
                     }
                 }
 
+                Console.WriteLine("Deleted " + deletedFileCount + " files.");
                 if (continuous)
                 {
                     if (verbose > 0)
@@ -168,7 +179,13 @@ namespace PruneImageStore
 
         private static void Usage()
         {
-            Console.WriteLine("PruneImageStore <folder-path> [-t <threshold>] [-v] [-V] [-c -w <milliseconds>]");
+            Console.WriteLine("PruneImageStore <folder-path> [-t <threshold>] [-v] [-V] [-c -w <milliseconds>] [-d]");
+            Console.WriteLine("<folder-path>:\tThe folder to prune.");
+            Console.WriteLine("-t <threshold>:\tWhat Average Square Difference is considered \"same.\"");
+            Console.WriteLine("-v and -V:\tVerbose.");
+            Console.WriteLine("-c:\tContinuously. Defaults to wait 10000 ms between cycle.");
+            Console.WriteLine("-w <milliseconds>:\tThe time to wait between continuous executions.");
+            Console.WriteLine("-d:\tDry run - delete no files.");
         }
     }
 }
