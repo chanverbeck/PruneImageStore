@@ -113,12 +113,12 @@ namespace PruneImageStore
                 if (verbose > 0)
                 {
                     logWriter.WriteLine("==========================");
-                    logWriter.WriteLine("Prune " + folderPath + " at " + DateTime.Now + " (" + TimeZone.CurrentTimeZone.StandardName + ")");
+                    logWriter.WriteLine("Prune " + folderPath + " at " + DateTime.Now + " (" + GetTimeZoneName() + ")");
                     logWriter.WriteLine("==========================");
                     logWriter.Flush();
                 }
 
-                foreach (string filePath in Directory.EnumerateFiles(folderPath))
+                foreach (string filePath in Directory.EnumerateFiles(folderPath, "*.jpg"))
                 {
                     if (comparisonFilePath == null)
                     {
@@ -234,6 +234,18 @@ namespace PruneImageStore
             Console.Error.WriteLine("-w <ms>:\tThe time to wait between continuous executions in milliseconds.");
             Console.Error.WriteLine("-d:\t\tDry run - delete no files.");
             Console.Error.WriteLine("-l <log-file>:\tLog to a file instead of stdout.");
+        }
+
+        private static string GetTimeZoneName()
+        {
+            if (TimeZone.CurrentTimeZone.IsDaylightSavingTime(DateTime.Now))
+            {
+                return TimeZone.CurrentTimeZone.DaylightName;
+            }
+            else
+            {
+                return TimeZone.CurrentTimeZone.StandardName;
+            }
         }
     }
 }
