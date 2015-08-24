@@ -18,6 +18,7 @@ namespace PruneImageStore
             bool continuous = false;
             int continuousWait = 10000;
             bool dryRun = false;
+            string logFileName = null;
 
             for (int arg = 0; arg < args.Length; ++arg)
             {
@@ -25,7 +26,7 @@ namespace PruneImageStore
                 {
                     case "-t":
                         ++arg;
-                        if (arg > args.Length)
+                        if (arg >= args.Length)
                         {
                             Usage();
                             return 1;
@@ -52,7 +53,7 @@ namespace PruneImageStore
 
                     case "-w":
                         ++arg;
-                        if (arg > args.Length)
+                        if (arg >= args.Length)
                         {
                             Usage();
                             return 1;
@@ -63,6 +64,17 @@ namespace PruneImageStore
                             Usage();
                             return 1;
                         }
+                        break;
+
+                    case "-l":
+                        ++arg;
+                        if (arg >= args.Length)
+                        {
+                            Usage();
+                            return 1;
+                        }
+
+                        logFileName = args[arg];
                         break;
 
                     case "-d":
@@ -85,6 +97,12 @@ namespace PruneImageStore
                 return 1;
             }
 
+            TextWriter logWriter = Console.Out;
+            if (logFileName != null)
+            {
+                logWriter = new StreamWriter(logFileName, true);
+            }
+
             string comparisonFilePath = null;
             bool firstRun = true;
 
@@ -92,6 +110,14 @@ namespace PruneImageStore
             {
                 int deletedFileCount = 0;
                 firstRun = false;
+                if (verbose > 0)
+                {
+                    logWriter.WriteLine("==========================");
+                    logWriter.WriteLine("Prune " + folderPath + " at " + DateTime.Now + " (" + TimeZone.CurrentTimeZone.StandardName + ")");
+                    logWriter.WriteLine("==========================");
+                    logWriter.Flush();
+                }
+
                 foreach (string filePath in Directory.EnumerateFiles(folderPath))
                 {
                     if (comparisonFilePath == null)
@@ -102,7 +128,7 @@ namespace PruneImageStore
                     {
                         if (verbose > 1)
                         {
-                            Console.WriteLine("Compare " + filePath + " with " + comparisonFilePath);
+                            logWriter.WriteLine("Compare " + filePath + " with " + comparisonFilePath);
                         }
 
                         Comparison c = new Comparison(comparisonFilePath, filePath);
@@ -112,7 +138,7 @@ namespace PruneImageStore
 
                             if (verbose > 1)
                             {
-                                Console.WriteLine("\tAAD: " + c.AverageAbsoluteDifferenceText + "\tASD: " + c.AverageSquareDifferenceText);
+                                logWriter.WriteLine("\tAAD: " + c.AverageAbsoluteDifferenceText + "\tASD: " + c.AverageSquareDifferenceText);
                             }
 
                             if (c.AverageSquareDifference < threshold)
@@ -120,13 +146,13 @@ namespace PruneImageStore
                                 ++deletedFileCount;
                                 if (verbose > 0)
                                 {
-                                    Console.WriteLine("Old is same as new (ASD = " + c.AverageSquareDifferenceText + "), delete new: " + Path.GetFileName(filePath));
+                                    logWriter.WriteLine("Old is same as new (ASD = " + c.AverageSquareDifferenceText + "), delete new: " + Path.GetFileName(filePath));
                                 }
                                 if (!dryRun)
                                 {
                                     if (verbose > 1)
                                     {
-                                        Console.WriteLine("Delete " + filePath);
+                                        logWriter.WriteLine("Delete " + filePath);
                                     }
                                     File.Delete(filePath);
                                 }
@@ -145,6 +171,13 @@ namespace PruneImageStore
                             Console.Error.WriteLine("Files");
                             Console.Error.WriteLine("\tLeft:\t" + comparisonFilePath);
                             Console.Error.WriteLine("\tRight:\t" + filePath);
+                            if (logWriter != Console.Out)
+                            {
+                                logWriter.WriteLine("IOException: " + e.Message);
+                                logWriter.WriteLine("Files");
+                                logWriter.WriteLine("\tLeft:\t" + comparisonFilePath);
+                                logWriter.WriteLine("\tRight:\t" + filePath);
+                            }
                             comparisonFilePath = filePath;
                         }
                         catch (NotSupportedException e)
@@ -153,6 +186,13 @@ namespace PruneImageStore
                             Console.Error.WriteLine("Files");
                             Console.Error.WriteLine("\tLeft:\t" + comparisonFilePath);
                             Console.Error.WriteLine("\tRight:\t" + filePath);
+                            if (logWriter != Console.Out)
+                            {
+                                logWriter.WriteLine("NotSupportedException: " + e.Message);
+                                logWriter.WriteLine("Files");
+                                logWriter.WriteLine("\tLeft:\t" + comparisonFilePath);
+                                logWriter.WriteLine("\tRight:\t" + filePath);
+                            }
                             comparisonFilePath = filePath;
                         }
                     }
@@ -161,17 +201,24 @@ namespace PruneImageStore
                         // This is the case where continuous is true, and
                         // we've already seen the file in the prior iteration.
                     }
+
+                    logWriter.Flush();
                 }
 
-                Console.WriteLine("Deleted " + deletedFileCount + " files.");
+                logWriter.WriteLine("Deleted " + deletedFileCount + " files.");
                 if (continuous)
                 {
                     if (verbose > 0)
                     {
-                        Console.WriteLine("Sleeping " + continuousWait + " milliseconds.");
+                        logWriter.WriteLine("Sleeping " + continuousWait + " milliseconds.");
                     }
                     System.Threading.Thread.Sleep(continuousWait);
                 }
+            }
+
+            if (logWriter != Console.Out)
+            {
+                logWriter.Close();
             }
 
             return 0;
@@ -179,13 +226,14 @@ namespace PruneImageStore
 
         private static void Usage()
         {
-            Console.WriteLine("PruneImageStore <folder-path> [-t <threshold>] [-v] [-V] [-c -w <milliseconds>] [-d]");
-            Console.WriteLine("<folder-path>:\tThe folder to prune.");
-            Console.WriteLine("-t <threshold>:\tWhat Average Square Difference is considered \"same.\"");
-            Console.WriteLine("-v and -V:\tVerbose.");
-            Console.WriteLine("-c:\tContinuously. Defaults to wait 10000 ms between cycle.");
-            Console.WriteLine("-w <milliseconds>:\tThe time to wait between continuous executions.");
-            Console.WriteLine("-d:\tDry run - delete no files.");
+            Console.Error.WriteLine("PruneImageStore <folder-path> [-t <threshold>] [-v] [-V] [-c -w <ms>] [-d] [-l <log-file>]");
+            Console.Error.WriteLine("<folder-path>:\tThe folder to prune.");
+            Console.Error.WriteLine("-t <threshold>:\tWhat Average Square Difference is considered \"same.\"");
+            Console.Error.WriteLine("-v and -V:\tVerbose.");
+            Console.Error.WriteLine("-c:\t\tContinuously. Defaults to wait 10000 ms between cycle.");
+            Console.Error.WriteLine("-w <ms>:\tThe time to wait between continuous executions in milliseconds.");
+            Console.Error.WriteLine("-d:\t\tDry run - delete no files.");
+            Console.Error.WriteLine("-l <log-file>:\tLog to a file instead of stdout.");
         }
     }
 }
