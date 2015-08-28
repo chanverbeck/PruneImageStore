@@ -98,16 +98,16 @@ namespace PruneImageStore
             }
 
             TextWriter logWriter = Console.Out;
-            if (logFileName != null)
-            {
-                logWriter = new StreamWriter(logFileName, true);
-            }
-
             string comparisonFilePath = null;
             bool firstRun = true;
 
             while (continuous || firstRun)
             {
+                if (logFileName != null)
+                {
+                    logWriter = new StreamWriter(logFileName, true);
+                }
+
                 int deletedFileCount = 0;
                 firstRun = false;
                 if (verbose > 0)
@@ -205,20 +205,26 @@ namespace PruneImageStore
                     logWriter.Flush();
                 }
 
-                logWriter.WriteLine("Deleted " + deletedFileCount + " files.");
-                if (continuous)
+                if (verbose > 0)
                 {
-                    if (verbose > 0)
+                    logWriter.WriteLine("Deleted " + deletedFileCount + " files.");
+
+                    if (continuous)
                     {
                         logWriter.WriteLine("Sleeping " + continuousWait + " milliseconds.");
                     }
+                    logWriter.Flush();
+                }
+
+                if (logWriter != Console.Out)
+                {
+                    logWriter.Close();
+                }
+
+                if (continuous)
+                {
                     System.Threading.Thread.Sleep(continuousWait);
                 }
-            }
-
-            if (logWriter != Console.Out)
-            {
-                logWriter.Close();
             }
 
             return 0;
